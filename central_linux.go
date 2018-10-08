@@ -92,7 +92,11 @@ func (c *central) handleReq(b []byte) []byte {
 		resp = c.handleReadByGroup(req)
 	case attOpWriteReq, attOpWriteCmd:
 		resp = c.handleWrite(reqType, req)
-	case attOpReadMultiReq, attOpPrepWriteReq, attOpExecWriteReq, attOpSignedWriteCmd:
+	case attOpPrepWriteReq:
+		resp = c.handleWritePrep(req)
+	case attOpExecWriteReq:
+		resp = c.handleWriteExec(req)
+	case attOpReadMultiReq, attOpSignedWriteCmd:
 		fallthrough
 	default:
 		resp = attErrorRsp(reqType, 0x0000, attEcodeReqNotSupp)
@@ -409,6 +413,57 @@ func (c *central) handleWrite(reqType byte, b []byte) []byte {
 		return nil
 	}
 	return []byte{attOpWriteRsp}
+}
+
+var prepQue []byte = nil
+
+func (c *central) handleWritePrep(b []byte) []byte {
+	if len(b) <= 4 {
+		return attErrorRsp(attOpPrepWriteReq, 0x0000, attEcodeReqNotSupp)
+	}
+	if prepQue == nil {
+		prepQue = []byte{attOpWriteReq, 0}
+	}
+	value := b[4:]
+	prepQue = append(prepQue, value...)
+	return attErrorRsp(attOpPrepWriteReq, 0x0000, attEcodeSuccess)
+}
+
+func (c *central) handleWriteExec(b []byte) []byte {
+	if len(b) > 4 {
+		value := b[4:]
+		prepQue = append(prepQue, value...)
+	}
+
+	// write exec
+	h := binary.LittleEndian.Uint16(prepQue[:2])
+	a, ok := c.attrs.At(h)
+	if !ok {
+		return attErrorRsp(attOpExecWriteReq, h, attEcodeInvalidHandle)
+	}
+
+	charFlag := CharWrite
+	if a.props&charFlag == 0 {
+		return attErrorRsp(attOpExecWriteReq, h, attEcodeWriteNotPerm)
+	}
+	if a.secure&charFlag == 0 && c.security > securityLow {
+		return attErrorRsp(attOpExecWriteReq, h, attEcodeAuthentication)
+	}
+
+	// Props of Service and Characteristic declration are read only.
+	// So we only need deal with writable descriptors here.
+	// (Characteristic's value is implemented with descriptor)
+	if !a.typ.Equal(attrClientCharacteristicConfigUUID) {
+		// Regular write, not CCC
+		r := Request{Central: c}
+		if c, ok := a.pvt.(*Characteristic); ok {
+			c.whandler.ServeWrite(r, prepQue[2:])
+		} else if d, ok := a.pvt.(*Characteristic); ok {
+			d.whandler.ServeWrite(r, prepQue[2:])
+		}
+	}
+	prepQue = nil
+	return []byte{attOpExecWriteRsp}
 }
 
 func (c *central) sendNotification(a *attr, data []byte) (int, error) {
