@@ -3,7 +3,7 @@ package gatt
 import (
 	"sync"
 
-	"github.com/paypal/gatt/xpc"
+	"github.com/Photosynth-inc/gatt/xpc"
 )
 
 type central struct {

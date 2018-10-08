@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/paypal/gatt"
+	"github.com/Photosynth-inc/gatt"
 )
 
 func NewCountService() *gatt.Service {
