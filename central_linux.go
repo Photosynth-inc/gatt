@@ -418,15 +418,18 @@ func (c *central) handleWrite(reqType byte, b []byte) []byte {
 var prepQue []byte = nil
 
 func (c *central) handleWritePrep(b []byte) []byte {
+	h := binary.LittleEndian.Uint16(b[:2])
 	if len(b) <= 4 {
-		return attErrorRsp(attOpPrepWriteReq, 0x0000, attEcodeReqNotSupp)
+		return attErrorRsp(attOpPrepWriteReq, h, attEcodeSuccess)
 	}
 	if prepQue == nil {
 		prepQue = []byte{attOpWriteReq, 0}
 	}
 	value := b[4:]
 	prepQue = append(prepQue, value...)
-	return attErrorRsp(attOpPrepWriteReq, 0x0000, attEcodeSuccess)
+	rsp := []byte{attOpPrepWriteRsp}
+	rsp = append(rsp, b...)
+	return rsp
 }
 
 func (c *central) handleWriteExec(b []byte) []byte {
